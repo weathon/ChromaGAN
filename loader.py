@@ -37,6 +37,11 @@ class Dataset(torch.utils.data.Dataset):
 
                 noise = np.random.normal(0, 1, img_x.shape) * mean * 0.1
                 img_y = img_y + noise
+                list_mz = list(range(self.mz))
+                random_earse_indcies_x = np.random.choice(list_mz, random.randint(0, int(0.05 * self.mz)), replace=False)
+                random_earse_indcies_y = np.random.choice(list_mz, random.randint(0, int(0.05 * self.mz)), replace=False)
+                img_x[random_earse_indcies_x] *= 0.05
+                img_y[random_earse_indcies_y] *= 0.05
 
                 img_x = img_x + np.random.uniform(0, 0.1) * np.array(noise_img)
                 img_x = (img_x - img_x.min()) / (img_x.max() - img_x.min() + 1e-6)
@@ -51,7 +56,7 @@ class Dataset(torch.utils.data.Dataset):
 
 def loader():
     dataset = Dataset("./2048/", config["raw_img_size"], config["mz"], config["time"])
-    dataloader = torch.utils.data.DataLoader(dataset, batch_size=config["BS"], shuffle=True, num_workers=32)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=config["BS"], shuffle=True, num_workers=4, drop_last=True)
     return dataloader
 
 if __name__ == "__main__":

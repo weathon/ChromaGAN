@@ -78,6 +78,13 @@ parser.add_argument(
     metavar="N",
     help="manual epoch number (useful on restarts)",
 )
+parser.add_argument(
+    "--run_id",
+    default="",
+    type=str,
+    metavar="ID",
+    help="run_id for wandb",
+)
 # parser.add_argument(
 #     "-b",
 #     "--batch-size",
@@ -278,22 +285,17 @@ def main_worker(gpu, ngpus_per_node, args):
 
             self.proj = nn.Sequential(
                 nn.Linear(dim, 2*dim),
-                nn.BatchNorm1d(2*dim),
                 nn.GELU(),
                 nn.Linear(2*dim, 4*dim),
-                nn.BatchNorm1d(4*dim),
                 nn.GELU(),
                 nn.Linear(4*dim, dim),
-                nn.BatchNorm1d(dim),
                 nn.GELU(),
             )
         
             self.pred = nn.Sequential(
                 nn.Linear(dim, 2*dim),
-                nn.BatchNorm1d(2*dim),
                 nn.GELU(),
                 nn.Linear(2*dim, 4*dim),
-                nn.BatchNorm1d(4*dim),
                 nn.GELU(),
                 nn.Linear(4*dim, dim)
             ) if pred else nn.Identity()
@@ -312,6 +314,9 @@ def main_worker(gpu, ngpus_per_node, args):
     BaseModel = BaseModel
     if config["moco_k"] == "max":
         config["moco_k"] = (len(os.listdir("./2048/"))//config["BS"])*config["BS"]
+        # Save config back to config.json
+        with open('config.json', 'w') as f:
+            json.dump(config, f)
     model = moco.builder.MoCo(
         BaseModel,
         config["K"],
@@ -408,7 +413,7 @@ def main_worker(gpu, ngpus_per_node, args):
     #     sampler=train_sampler,
     #     drop_last=True,
     # )
-    wandb.init(config=config)
+    wandb.init(config=config, resume=args.run_id)
 
     for epoch in range(args.start_epoch, config["epochs"]):
         # if args.distributed:
@@ -421,21 +426,23 @@ def main_worker(gpu, ngpus_per_node, args):
         if not args.multiprocessing_distributed or (
             args.multiprocessing_distributed and args.rank % ngpus_per_node == 0
         ):
-            save_checkpoint(
-                {
-                    "epoch": epoch + 1,
-                    "arch": "GC Transformer",
-                    "state_dict": model.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                },
-                is_best=False,
-                filename="checkpoint_{:04d}.pth.tar".format(epoch),
-            )
+            if epoch % 10 == 0:
+                save_checkpoint(
+                    {
+                        "epoch": epoch + 1,
+                        "arch": "GC Transformer",
+                        "state_dict": model.state_dict(),
+                        "optimizer": optimizer.state_dict(),
+                    },
+                    is_best=False,
+                    filename="/srv/s01/leaves-shared/marshall/2D/checkpoint_{:04d}.pth.tar".format(epoch),
+                )
 
 import wandb
 import pylab 
 import io
 from PIL import Image
+import json
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter("Time", ":6.3f")
     data_time = AverageMeter("Data", ":6.3f")
@@ -443,7 +450,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
     top1 = AverageMeter("Acc@1", ":6.2f")
     top5 = AverageMeter("Acc@5", ":6.2f")
     progress = ProgressMeter(
-        config["itter"],
+        len(os.listdir("./2048/"))//config["BS"],
         [batch_time, data_time, losses, top1, top5],
         prefix="Epoch: [{}]".format(epoch),
     )
